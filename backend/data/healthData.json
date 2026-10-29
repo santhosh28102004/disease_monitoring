@@ -1,0 +1,107 @@
+{
+  "alerts": [
+    {
+      "id": "AL-101",
+      "title": "Dengue spike in Zone 4",
+      "severity": "High",
+      "area": "Zone 4",
+      "message": "12 new patient visits recorded in the last 7 days.",
+      "lastUpdated": "2026-08-22"
+    },
+    {
+      "id": "AL-102",
+      "title": "Cholera risk watch",
+      "severity": "Moderate",
+      "area": "Zone 2",
+      "message": "Water sampling results require handwashing follow-up.",
+      "lastUpdated": "2026-08-21"
+    },
+    {
+      "id": "AL-103",
+      "title": "Influenza cluster",
+      "severity": "Low",
+      "area": "Zone 1",
+      "message": "School-based screening flagged a mild increase in cases.",
+      "lastUpdated": "2026-08-18"
+    }
+  ],
+  "incidents": [
+    {
+      "id": "INC-201",
+      "disease": "Dengue",
+      "zone": "Zone 4",
+      "severity": "High",
+      "status": "Escalated",
+      "cases": 18,
+      "deaths": 1,
+      "reportedBy": "Community nurse",
+      "symptoms": "High fever, rash, muscle pain",
+      "date": "2026-08-23"
+    },
+    {
+      "id": "INC-202",
+      "disease": "Cholera",
+      "zone": "Zone 2",
+      "severity": "High",
+      "status": "Monitoring",
+      "cases": 9,
+      "deaths": 0,
+      "reportedBy": "Environmental health officer",
+      "symptoms": "Diarrhea, dehydration",
+      "date": "2026-08-22"
+    },
+    {
+      "id": "INC-203",
+      "disease": "Malaria",
+      "zone": "Zone 6",
+      "severity": "Moderate",
+      "status": "Active",
+      "cases": 11,
+      "deaths": 0,
+      "reportedBy": "Rural clinic",
+      "symptoms": "Fever, chills, fatigue",
+      "date": "2026-08-20"
+    },
+    {
+      "id": "INC-204",
+      "disease": "Influenza",
+      "zone": "Zone 1",
+      "severity": "Low",
+      "status": "Contained",
+      "cases": 6,
+      "deaths": 0,
+      "reportedBy": "School health team",
+      "symptoms": "Cough, sore throat",
+      "date": "2026-08-19"
+    }
+  ],
+  "reports": [
+    {
+      "id": "R-301",
+      "title": "Vaccination coverage review",
+      "area": "Ward 14",
+      "type": "Monthly summary",
+      "trend": "Positive",
+      "summary": "Coverage reached 87% of the target under-five population.",
+      "date": "2026-08-20"
+    },
+    {
+      "id": "R-302",
+      "title": "Water sanitation inspection",
+      "area": "Zone 2",
+      "type": "Field report",
+      "trend": "Needs attention",
+      "summary": "Seven households require chlorination and leak repairs.",
+      "date": "2026-08-18"
+    },
+    {
+      "id": "R-303",
+      "title": "Outbreak briefing",
+      "area": "District-level",
+      "type": "Leadership brief",
+      "trend": "Stable",
+      "summary": "Daily case count remains below last month’s peak but requires continued tracking.",
+      "date": "2026-08-16"
+    }
+  ]
+}
