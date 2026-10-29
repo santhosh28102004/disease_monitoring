@@ -7,7 +7,12 @@ const mongoose = require('mongoose');
 exports.register = async (req, res, next) => {
   try {
     const { fullName, email, phone, password, confirmPassword, location } = req.body;
+    const requestedRole = req.body.role ?? 'CITIZEN';
     const normalizedEmail = email?.trim().toLowerCase();
+
+    if (!['CITIZEN', 'HEALTHCARE_WORKER'].includes(requestedRole)) {
+      return res.status(400).json({ message: 'Choose a supported account type.' });
+    }
 
     if (password !== confirmPassword) {
       return res.status(400).json({ message: 'Passwords do not match' });
@@ -18,15 +23,19 @@ exports.register = async (req, res, next) => {
       return res.status(400).json({ message: 'Email already registered' });
     }
 
-    const userLocation = location
+    if (requestedRole === 'CITIZEN' && (typeof location !== 'string' || !location.trim())) {
+      return res.status(400).json({ message: 'Location is required for user registration.' });
+    }
+
+    let userLocation = location && requestedRole === 'CITIZEN'
       ? await Location.findOne(
         mongoose.isValidObjectId(location)
           ? { _id: location }
           : { area: { $regex: `^${location.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } }
       )
       : null;
-    if (location && !userLocation) {
-      return res.status(400).json({ message: 'Selected location was not found. Refresh the location list and try again.' });
+    if (!userLocation && requestedRole === 'CITIZEN') {
+      userLocation = await Location.create({ area: location.trim() });
     }
 
     const user = new User({
@@ -35,7 +44,7 @@ exports.register = async (req, res, next) => {
       phone,
       password,
       location: userLocation?._id,
-      role: 'CITIZEN',
+      role: requestedRole,
     });
 
     await user.save();
@@ -50,7 +59,7 @@ exports.register = async (req, res, next) => {
     });
 
     res.status(201).json({
-      message: 'User registered successfully',
+      message: 'Account registered successfully',
       token,
       user: {
         id: user._id,
@@ -79,7 +88,7 @@ exports.login = async (req, res, next) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
     if (!user.isActive) {
-      return res.status(403).json({ message: 'Account is inactive' });
+      return res.status(403).json({ message: 'Account is inactive.' });
     }
 
     const token = generateToken(user._id, user.role);

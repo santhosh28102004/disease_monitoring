@@ -1,7 +1,7 @@
 export type Role = 'citizen' | 'official';
 export type AccountRole = 'CITIZEN' | 'HEALTHCARE_WORKER' | 'HEALTH_OFFICIAL' | 'ADMIN';
 
-export type Status = 'Pending' | 'Verified' | 'Rejected' | 'Under Review' | 'Active' | 'Acknowledged' | 'Resolved';
+export type Status = 'Submitted' | 'Pending' | 'Verified' | 'Rejected' | 'Under Review' | 'Active' | 'Acknowledged' | 'Resolved';
 export type Severity = 'Low' | 'Medium' | 'High';
 export type RiskLevel = 'Low' | 'Medium' | 'High';
 export type AlertStatus = 'Active' | 'Acknowledged' | 'Resolved';
@@ -18,6 +18,7 @@ export interface User {
 
 export interface Report {
   id: string;
+  reportedById?: string;
   reportedBy: string;
   disease: string;
   symptoms: string;

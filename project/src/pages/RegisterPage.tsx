@@ -1,13 +1,8 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ShieldCheck, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { apiRequest } from '@/lib/api';
-
-interface LocationOption {
-  _id: string;
-  area: string;
-}
 
 interface RegistrationResponse {
   token: string;
@@ -24,18 +19,15 @@ interface RegistrationResponse {
 export function RegisterPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [locations, setLocations] = useState<LocationOption[]>([]);
+  const [searchParams] = useSearchParams();
+  const [accountType, setAccountType] = useState<'user' | 'official'>(
+    searchParams.get('role') === 'official' ? 'official' : 'user',
+  );
   const [form, setForm] = useState({
     name: '', email: '', phone: '', location: '', password: '', confirmPassword: '', terms: false,
   });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  useEffect(() => {
-    apiRequest<LocationOption[]>('/locations')
-      .then(setLocations)
-      .catch((requestError: unknown) => setError(requestError instanceof Error ? requestError.message : 'Unable to load locations.'));
-  }, []);
 
   const update = (key: string, val: string | boolean) => setForm((p) => ({ ...p, [key]: val }));
 
@@ -50,6 +42,10 @@ export function RegisterPage() {
       setError('Please agree to the Terms of Service and Privacy Policy.');
       return;
     }
+    if (accountType === 'user' && !form.location.trim()) {
+      setError('Enter your location to create a user account.');
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -60,21 +56,28 @@ export function RegisterPage() {
           fullName: form.name,
           email: form.email,
           phone: form.phone,
-          location: form.location,
+          location: accountType === 'user' ? form.location.trim() : undefined,
           password: form.password,
           confirmPassword: form.confirmPassword,
+          role: accountType === 'official' ? 'HEALTHCARE_WORKER' : 'CITIZEN',
         }),
       });
+      if (!result.token) {
+        throw new Error('Registration completed without a login token. Please try logging in.');
+      }
+      const accountRole = accountType === 'official' ? 'HEALTHCARE_WORKER' : 'CITIZEN';
+      const role = accountType === 'official' ? 'official' : 'citizen';
       login({
         id: result.user.id,
         name: result.user.fullName,
         email: result.user.email,
         phone: result.user.phone,
         location: result.user.location,
-        role: 'citizen',
+        role,
+        accountRole,
         token: result.token,
       });
-      navigate('/dashboard');
+      navigate(role === 'official' ? '/admin/dashboard' : '/dashboard');
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to create your account.');
     } finally {
@@ -114,10 +117,35 @@ export function RegisterPage() {
       <div className="flex-1 flex items-center justify-center bg-app-bg px-4 py-8">
         <div className="w-full max-w-md">
           <div className="card p-8">
-            <h2 className="text-2xl font-bold text-ink">Create Account</h2>
+            <h2 className="text-2xl font-bold text-ink">
+              {accountType === 'user' ? 'Register as User' : 'Register as Healthcare Official'}
+            </h2>
             <p className="mt-2 text-sm text-ink-muted">Join your community's health network today.</p>
 
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+            <>
+            <fieldset className="mt-6">
+              <legend className="label">Create account as</legend>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  aria-pressed={accountType === 'user'}
+                  onClick={() => setAccountType('user')}
+                  className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition ${accountType === 'user' ? 'border-primary bg-primary-light text-primary' : 'border-border text-ink-muted hover:bg-slate-50'}`}
+                >
+                  Register as User
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={accountType === 'official'}
+                  onClick={() => setAccountType('official')}
+                  className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition ${accountType === 'official' ? 'border-primary bg-primary-light text-primary' : 'border-border text-ink-muted hover:bg-slate-50'}`}
+                >
+                  Register as Healthcare Official
+                </button>
+              </div>
+            </fieldset>
+
+            <form onSubmit={handleSubmit} className="mt-4 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="label">Full Name</label>
@@ -132,13 +160,21 @@ export function RegisterPage() {
                 <label className="label">Email</label>
                 <input type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="you@example.com" className="input" required />
               </div>
-              <div>
-                <label className="label">Location</label>
-                <select value={form.location} onChange={(e) => update('location', e.target.value)} className="input" required>
-                  <option value="">Select your neighborhood</option>
-                  {locations.map((location) => <option key={location._id} value={location._id}>{location.area}</option>)}
-                </select>
-              </div>
+              {accountType === 'user' && (
+                <div>
+                  <label className="label" htmlFor="register-location">Location</label>
+                  <input
+                    id="register-location"
+                    value={form.location}
+                    onChange={(e) => update('location', e.target.value)}
+                    placeholder="Type your area or neighborhood"
+                    className="input"
+                    autoComplete="address-level3"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-ink-muted">Used to show cases and alerts in your area and prefill report forms.</p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="label">Password</label>
@@ -161,8 +197,9 @@ export function RegisterPage() {
 
             <p className="mt-4 text-center text-sm text-ink-muted">
               Already have an account?{' '}
-              <Link to="/login" className="text-primary font-medium hover:underline">Login</Link>
+              <Link to={`/login?role=${accountType}`} className="text-primary font-medium hover:underline">Login</Link>
             </p>
+            </>
           </div>
           <p className="mt-6 text-center text-sm">
             <Link to="/" className="text-ink-muted hover:text-ink">← Back to home</Link>

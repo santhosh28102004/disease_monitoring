@@ -28,9 +28,9 @@ const officialNav = [
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { role, user, logout } = useAuth();
-  const { reports, alerts } = useData();
+  const { reports, alerts, locationCases } = useData();
   const nav = role === 'official'
-    ? user?.accountRole === 'HEALTH_OFFICIAL'
+    ? user?.accountRole === 'HEALTH_OFFICIAL' || user?.accountRole === 'HEALTHCARE_WORKER'
       ? [
           ...officialNav.slice(0, 1),
           { to: '/official/user-overview', label: 'User Overview', icon: ClipboardList },
@@ -40,7 +40,9 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
     : citizenNav;
 
   const pendingCount = reports.filter((r) => r.status === 'Pending').length;
-  const activeAlertCount = alerts.filter((a) => a.status === 'Active').length;
+  const activeAlertCount = user?.role === 'citizen'
+    ? locationCases.length
+    : alerts.filter((a) => a.status === 'Active').length;
 
   const getBadge = (item: typeof nav[number]) => {
     if (item.badge && role === 'official' && item.label === 'Pending Reports') return pendingCount;

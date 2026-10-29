@@ -25,10 +25,13 @@ import { AdminProfile } from '@/pages/admin/AdminProfile';
 import { HealthOfficialOverview } from '@/pages/official/HealthOfficialOverview';
 import type { AccountRole } from '@/data/mockData';
 
-function ProtectedRoute({ children, role, accountRole }: { children: ReactNode; role: 'citizen' | 'official'; accountRole?: AccountRole }) {
+function ProtectedRoute({ children, role, accountRole }: { children: ReactNode; role: 'citizen' | 'official'; accountRole?: AccountRole | AccountRole[] }) {
   const { user } = useAuth();
   const location = useLocation();
-  if (!user || user.role !== role || (accountRole && user.accountRole !== accountRole)) {
+  const allowedAccountRoles = accountRole
+    ? Array.isArray(accountRole) ? accountRole : [accountRole]
+    : null;
+  if (!user || user.role !== role || (allowedAccountRoles && !allowedAccountRoles.includes(user.accountRole ?? 'CITIZEN'))) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
   return <>{children}</>;
@@ -57,7 +60,7 @@ function AppRoutes() {
       <Route path="/admin/analytics" element={<ProtectedRoute role="official"><DiseaseAnalytics /></ProtectedRoute>} />
       <Route path="/admin/alerts" element={<ProtectedRoute role="official"><AlertsManagement /></ProtectedRoute>} />
       <Route path="/admin/profile" element={<ProtectedRoute role="official"><AdminProfile /></ProtectedRoute>} />
-      <Route path="/official/user-overview" element={<ProtectedRoute role="official" accountRole="HEALTH_OFFICIAL"><HealthOfficialOverview /></ProtectedRoute>} />
+      <Route path="/official/user-overview" element={<ProtectedRoute role="official" accountRole={['HEALTHCARE_WORKER', 'HEALTH_OFFICIAL']}><HealthOfficialOverview /></ProtectedRoute>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

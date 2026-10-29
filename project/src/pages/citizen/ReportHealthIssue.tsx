@@ -15,7 +15,7 @@ export function ReportHealthIssue() {
   const [submitting, setSubmitting] = useState(false);
   const [fileName, setFileName] = useState('');
   const [form, setForm] = useState({
-    disease: '', symptoms: '', affectedPeople: 1, location: '',
+    disease: '', symptoms: '', affectedPeople: 1, location: user?.location ?? '',
     dateObserved: new Date().toISOString().slice(0, 10), severity: 'Low' as Severity, description: '',
   });
 

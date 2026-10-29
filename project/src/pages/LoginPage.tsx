@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ShieldCheck, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { apiRequest } from '@/lib/api';
@@ -23,8 +23,13 @@ const toAppRole = (role: AccountRole): 'citizen' | 'official' =>
 export function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const [searchParams] = useSearchParams();
+  const [loginAs, setLoginAs] = useState<'user' | 'official'>(
+    searchParams.get('role') === 'official' ? 'official' : 'user',
+  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [location, setLocation] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -32,6 +37,10 @@ export function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (loginAs === 'user' && !location.trim()) {
+      setError('Enter your location to continue.');
+      return;
+    }
     setSubmitting(true);
     try {
       const result = await apiRequest<AuthResponse>('/auth/login', {
@@ -39,13 +48,21 @@ export function LoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
+      if (loginAs === 'user' && result.user.role !== 'CITIZEN') {
+        setError('This account is for healthcare staff. Choose “Login as Healthcare Official”.');
+        return;
+      }
+      if (loginAs === 'official' && result.user.role === 'CITIZEN') {
+        setError('This account is for a user. Choose “Login as User”.');
+        return;
+      }
       const role = toAppRole(result.user.role);
       login({
         id: result.user.id,
         name: result.user.fullName,
         email: result.user.email,
         phone: result.user.phone,
-        location: result.user.location,
+        location: role === 'citizen' ? location.trim() : result.user.location,
         role,
         accountRole: result.user.role,
         token: result.token,
@@ -78,14 +95,53 @@ export function LoginPage() {
       <div className="flex-1 flex items-center justify-center bg-app-bg px-4 py-8">
         <div className="w-full max-w-md">
           <div className="card p-8">
-            <h2 className="text-2xl font-bold text-ink">Login</h2>
+            <h2 className="text-2xl font-bold text-ink">
+              {loginAs === 'user' ? 'Login as User' : 'Login as Healthcare Official'}
+            </h2>
             <p className="mt-2 text-sm text-ink-muted">Welcome back! Please login to your account.</p>
+
+            <fieldset className="mt-6">
+              <legend className="label">Login as</legend>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  aria-pressed={loginAs === 'user'}
+                  onClick={() => { setLoginAs('user'); setError(''); }}
+                  className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition ${loginAs === 'user' ? 'border-primary bg-primary-light text-primary' : 'border-border text-ink-muted hover:bg-slate-50'}`}
+                >
+                  Login as User
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={loginAs === 'official'}
+                  onClick={() => { setLoginAs('official'); setError(''); }}
+                  className={`rounded-lg border px-3 py-2.5 text-sm font-medium transition ${loginAs === 'official' ? 'border-primary bg-primary-light text-primary' : 'border-border text-ink-muted hover:bg-slate-50'}`}
+                >
+                  Login as Healthcare Official
+                </button>
+              </div>
+            </fieldset>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               <div>
                 <label className="label">Email</label>
                 <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="input" required />
               </div>
+              {loginAs === 'user' && (
+                <div>
+                  <label className="label" htmlFor="login-location">Your location</label>
+                  <input
+                    id="login-location"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    placeholder="Type your area or neighborhood"
+                    className="input"
+                    autoComplete="address-level3"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-ink-muted">Used to show cases and alerts in your area and prefill report forms.</p>
+                </div>
+              )}
               <div>
                 <label className="label">Password</label>
                 <div className="relative">
@@ -106,7 +162,9 @@ export function LoginPage() {
 
             <p className="mt-4 text-center text-sm text-ink-muted">
               Don't have an account?{' '}
-              <Link to="/register" className="text-primary font-medium hover:underline">Register here</Link>
+              <Link to={`/register?role=${loginAs}`} className="text-primary font-medium hover:underline">
+                Register as {loginAs === 'user' ? 'a User' : 'a Healthcare Official'}
+              </Link>
             </p>
           </div>
 

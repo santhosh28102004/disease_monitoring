@@ -19,7 +19,9 @@ const authenticateToken = (req, res, next) => {
 
 const authorizeRole = (allowedRoles) => {
   return (req, res, next) => {
-    if (!allowedRoles.includes(req.user.role)) {
+    const userRole = String(req.user.role ?? '').toUpperCase();
+    const normalizedAllowedRoles = allowedRoles.map((role) => role.toUpperCase());
+    if (!normalizedAllowedRoles.includes(userRole)) {
       return res.status(403).json({ message: 'Access denied' });
     }
     next();

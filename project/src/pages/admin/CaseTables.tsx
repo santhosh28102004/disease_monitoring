@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Eye, RotateCcw, Trash2, X } from 'lucide-react';
+import { Check, Eye, MoreVertical, RotateCcw, Trash2, X } from 'lucide-react';
 import { AppShell, PageHeader } from '@/components/AppShell';
 import { Badge } from '@/components/Badge';
 import { useData } from '@/context/DataContext';
@@ -9,17 +9,33 @@ import { useToast } from '@/components/Toast';
 const PAGE_SIZE = 8;
 
 function CaseTable({ title, filter }: { title: string; filter: (r: Report) => boolean }) {
-  const { reports, reportsError } = useData();
+  const { reports, reportsError, deleteReport } = useData();
+  const { show } = useToast();
   const filtered = reports.filter(filter);
   const [page, setPage] = useState(1);
   const [viewReport, setViewReport] = useState<Report | null>(null);
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [actionError, setActionError] = useState('');
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const removeReport = async (report: Report) => {
+    if (!window.confirm(`Delete ${report.reportedBy}'s report for ${report.disease}? This will also remove its linked case tracking.`)) return;
+    setActionError('');
+    try {
+      await deleteReport(report.id);
+      setOpenMenu(null);
+      show('Report deleted successfully.');
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to delete this report.');
+    }
+  };
 
   return (
     <AppShell>
       <PageHeader title={title} breadcrumb={title} />
       {reportsError && <p role="alert" className="mb-4 text-sm text-danger-text">{reportsError}</p>}
+      {actionError && <p role="alert" className="mb-4 text-sm text-danger-text">{actionError}</p>}
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -44,10 +60,37 @@ function CaseTable({ title, filter }: { title: string; filter: (r: Report) => bo
                     <td className="px-4 py-3.5 text-sm text-ink-muted">{r.reportedBy}</td>
                     <td className="px-4 py-3.5 text-sm text-ink-muted">{new Date(r.dateObserved).toLocaleDateString()}</td>
                     <td className="px-4 py-3.5"><Badge status={r.severity} /></td>
-                    <td className="px-4 py-3.5 text-right">
-                      <button onClick={() => setViewReport(r)} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm text-primary hover:bg-primary-light transition">
-                        <Eye className="h-4 w-4" /> View
+                    <td className="px-4 py-3.5 text-right relative">
+                      <button
+                        type="button"
+                        aria-label={`Actions for ${r.reportedBy}'s verified case`}
+                        aria-haspopup="menu"
+                        aria-expanded={openMenu === r.id}
+                        onClick={() => setOpenMenu(openMenu === r.id ? null : r.id)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100 transition"
+                      >
+                        <MoreVertical className="h-4 w-4 text-ink-muted" />
                       </button>
+                      {openMenu === r.id && (
+                        <div role="menu" className="absolute right-4 top-12 z-10 w-40 rounded-lg border border-border bg-white shadow-lg overflow-hidden">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => { setViewReport(r); setOpenMenu(null); }}
+                            className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-ink hover:bg-slate-50"
+                          >
+                            <Eye className="h-4 w-4" /> View report
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => void removeReport(r)}
+                            className="flex w-full items-center gap-2 border-t border-border px-4 py-2.5 text-sm text-danger-text hover:bg-danger-bg"
+                          >
+                            <Trash2 className="h-4 w-4" /> Delete report
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))

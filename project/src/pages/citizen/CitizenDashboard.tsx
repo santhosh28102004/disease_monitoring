@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
-import { FileText, Clock, CheckCircle2, XCircle, Plus, Droplets, Sparkles, Bug, Stethoscope } from 'lucide-react';
-import { AppShell, PageHeader } from '@/components/AppShell';
+import { FileText, Clock, CheckCircle2, Plus, Droplets, Sparkles, Bug, Stethoscope } from 'lucide-react';
+import { AppShell } from '@/components/AppShell';
 import { StatCard } from '@/components/StatCard';
 import { Badge } from '@/components/Badge';
 import { useAuth } from '@/context/AuthContext';
@@ -11,12 +11,34 @@ const tipIcons: Record<string, typeof Droplets> = { Droplets, Sparkles, Bug, Ste
 
 export function CitizenDashboard() {
   const { user } = useAuth();
-  const { reports, reportsError } = useData();
-  const myReports = reports.filter((r) => r.reportedBy === user?.name);
-  const pending = myReports.filter((r) => r.status === 'Pending').length;
-  const verified = myReports.filter((r) => r.status === 'Verified').length;
-  const rejected = myReports.filter((r) => r.status === 'Rejected').length;
-  const recent = [...myReports].slice(0, 4);
+  const { reports, reportsError, locationCases } = useData();
+  const reportsById = new Map(
+    locationCases.map((caseItem) => [caseItem.id, {
+      id: caseItem.id,
+      disease: caseItem.disease,
+      location: user?.location ?? '',
+      dateObserved: caseItem.dateObserved,
+      status: caseItem.status,
+    }]),
+  );
+  reports.forEach((report) => {
+    reportsById.set(report.id, {
+      id: report.id,
+      disease: report.disease,
+      location: report.location,
+      dateObserved: report.dateObserved,
+      status: report.status,
+    });
+  });
+  const dashboardReports = [...reportsById.values()].sort(
+    (first, second) => new Date(second.dateObserved).getTime() - new Date(first.dateObserved).getTime(),
+  );
+  const statuses = ['Submitted', 'Verified', 'Active', 'Acknowledged', 'Resolved'] as const;
+  const statusCounts = statuses.map((status) => ({
+    status,
+    count: dashboardReports.filter((report) => report.status === status).length,
+  }));
+  const recent = dashboardReports.slice(0, 4);
 
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
@@ -36,16 +58,23 @@ export function CitizenDashboard() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard icon={FileText} label="My Reports" value={myReports.length} iconBg="bg-primary-light" iconColor="text-primary" />
-        <StatCard icon={Clock} label="Pending" value={pending} iconBg="bg-warning-bg" iconColor="text-warning-icon" />
-        <StatCard icon={CheckCircle2} label="Verified" value={verified} iconBg="bg-success-bg" iconColor="text-success-icon" />
-        <StatCard icon={XCircle} label="Rejected" value={rejected} iconBg="bg-danger-bg" iconColor="text-danger-icon" />
+        <StatCard icon={FileText} label="Reports in your location" value={dashboardReports.length} iconBg="bg-primary-light" iconColor="text-primary" />
+        {statusCounts.map(({ status, count }) => (
+          <StatCard
+            key={status}
+            icon={status === 'Resolved' || status === 'Verified' ? CheckCircle2 : Clock}
+            label={status}
+            value={count}
+            iconBg={status === 'Active' ? 'bg-danger-bg' : status === 'Resolved' || status === 'Verified' ? 'bg-success-bg' : 'bg-warning-bg'}
+            iconColor={status === 'Active' ? 'text-danger-icon' : status === 'Resolved' || status === 'Verified' ? 'text-success-icon' : 'text-warning-icon'}
+          />
+        ))}
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="card p-6 lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-ink">Recent Reports</h2>
+            <h2 className="text-base font-semibold text-ink">Recent Reports in your location</h2>
             <Link to="/my-reports" className="text-sm text-primary font-medium hover:underline">View All</Link>
           </div>
           <div className="space-y-3">

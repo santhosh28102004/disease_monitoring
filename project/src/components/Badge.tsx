@@ -9,6 +9,7 @@ const styles: Record<string, string> = {
   Acknowledged: 'bg-warning-bg text-warning-text',
   Low: 'bg-success-bg text-success-text',
   Pending: 'bg-warning-bg text-warning-text',
+  Submitted: 'bg-primary-light text-primary',
   Medium: 'bg-warning-bg text-warning-text',
   'Under Review': 'bg-warning-bg text-warning-text',
   Rejected: 'bg-danger-bg text-danger-text',

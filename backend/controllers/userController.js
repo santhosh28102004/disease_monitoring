@@ -1,5 +1,44 @@
 const User = require('../models/User');
+const Report = require('../models/Report');
 const AuditLog = require('../models/AuditLog');
+
+exports.getRegistrationOverview = async (req, res, next) => {
+  try {
+    const [users, reportCounts] = await Promise.all([
+      User.find({ role: 'CITIZEN' })
+        .select('fullName location')
+        .populate({ path: 'location', select: 'area' })
+        .sort({ fullName: 1 })
+        .lean(),
+      Report.aggregate([
+        { $group: { _id: '$reporter', reportCount: { $sum: 1 } } },
+      ]),
+    ]);
+
+    const reportsByUser = new Map(
+      reportCounts.map((item) => [String(item._id), item.reportCount])
+    );
+    const userSummaries = users.map((user) => ({
+      id: String(user._id),
+      name: user.fullName,
+      location: user.location?.area || 'Location not set',
+      reportCount: reportsByUser.get(String(user._id)) || 0,
+    }));
+    const locationCounts = new Map();
+    userSummaries.forEach((user) => {
+      locationCounts.set(user.location, (locationCounts.get(user.location) || 0) + 1);
+    });
+
+    res.json({
+      registeredUserCount: userSummaries.length,
+      users: userSummaries,
+      locations: Array.from(locationCounts, ([location, userCount]) => ({ location, userCount }))
+        .sort((a, b) => a.location.localeCompare(b.location)),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 exports.getAllUsers = async (req, res, next) => {
   try {

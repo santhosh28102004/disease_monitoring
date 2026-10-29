@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 
 export function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
   const { user, role, logout } = useAuth();
-  const { alerts } = useData();
+  const { alerts, locationCases } = useData();
   const navigate = useNavigate();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -14,7 +14,20 @@ export function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
   const notifRef = useRef<HTMLDivElement>(null);
 
   const activeAlerts = alerts.filter((a) => a.status === 'Active');
-  const notifCount = activeAlerts.length;
+  const notifications = role === 'citizen'
+    ? locationCases.map((caseItem) => ({
+        id: caseItem.id,
+        disease: caseItem.disease,
+        location: user?.location ?? '',
+        message: `Case status: ${caseItem.status}`,
+      }))
+    : activeAlerts.map((alert) => ({
+        id: alert.id,
+        disease: alert.disease,
+        location: alert.location,
+        message: alert.message,
+      }));
+  const notifCount = notifications.length;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -51,25 +64,23 @@ export function TopBar({ onMenuClick }: { onMenuClick: () => void }) {
                 <p className="text-sm font-semibold text-ink">Notifications</p>
               </div>
               <div className="max-h-80 overflow-y-auto">
-                {activeAlerts.length === 0 ? (
+                {notifications.length === 0 ? (
                   <p className="px-4 py-6 text-sm text-ink-muted text-center">No active alerts</p>
                 ) : (
-                  activeAlerts.map((a) => (
+                  notifications.map((notification) => (
                     <button
-                      key={a.id}
+                      key={notification.id}
                       type="button"
                       onClick={() => {
                         setNotifOpen(false);
-                        navigate(role === 'official' ? '/admin/alerts' : '/alerts', {
-                          state: { selectedAlertId: a.id },
-                        });
+                        navigate(role === 'official' ? '/admin/alerts' : '/alerts');
                       }}
                       className="flex w-full items-start gap-3 px-4 py-3 text-left hover:bg-slate-50 border-b border-border last:border-0"
                     >
                       <div className="mt-1.5 h-2 w-2 rounded-full bg-danger-icon shrink-0" />
                       <div>
-                        <p className="text-sm font-medium text-ink">{a.disease} alert in {a.location}</p>
-                        <p className="text-xs text-ink-muted mt-0.5">{a.message}</p>
+                        <p className="text-sm font-medium text-ink">{notification.disease} case in {notification.location}</p>
+                        <p className="text-xs text-ink-muted mt-0.5">{notification.message}</p>
                       </div>
                     </button>
                   ))

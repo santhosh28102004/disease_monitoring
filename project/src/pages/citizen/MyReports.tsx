@@ -4,34 +4,66 @@ import { AppShell, PageHeader } from '@/components/AppShell';
 import { Badge } from '@/components/Badge';
 import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
-import type { Report, Status } from '@/data/mockData';
+import type { Report, Severity, Status } from '@/data/mockData';
 
-const tabs: ('All' | Status)[] = ['All', 'Pending', 'Under Review', 'Verified', 'Active', 'Acknowledged', 'Resolved', 'Rejected'];
+const tabs: ('All' | Status)[] = ['All', 'Submitted', 'Pending', 'Under Review', 'Verified', 'Active', 'Acknowledged', 'Resolved', 'Rejected'];
 const PAGE_SIZE = 5;
 
 export function MyReports() {
   const { user } = useAuth();
-  const { reports, reportsError } = useData();
+  const { reports, reportsError, locationCases, locationCasesError } = useData();
   const [activeTab, setActiveTab] = useState<'All' | Status>('All');
   const [page, setPage] = useState(1);
   const [viewReport, setViewReport] = useState<Report | null>(null);
 
-  let myReports = reports.filter((r) => r.reportedBy === user?.name);
-  if (activeTab !== 'All') myReports = myReports.filter((r) => r.status === activeTab);
+  const reportsById = new Map(reports.map((report) => [report.id, report]));
+  locationCases.forEach((caseItem) => {
+    const existingReport = reportsById.get(caseItem.id);
+    const severity = ['Low', 'Medium', 'High'].includes(caseItem.severity)
+      ? caseItem.severity as Severity
+      : 'Low';
+    reportsById.set(caseItem.id, existingReport
+      ? { ...existingReport, status: caseItem.status }
+      : {
+        id: caseItem.id,
+        reportedBy: 'Location report',
+        disease: caseItem.disease,
+        symptoms: caseItem.symptoms.join(', '),
+        affectedPeople: caseItem.affectedPeople,
+        location: user?.location ?? '',
+        dateObserved: caseItem.dateObserved,
+        severity,
+        description: '',
+        status: caseItem.status,
+        verificationNotes: '',
+        followUpDate: '',
+        createdAt: caseItem.dateObserved,
+      });
+  });
+  const allReports = [...reportsById.values()].sort(
+    (first, second) => new Date(second.dateObserved).getTime() - new Date(first.dateObserved).getTime(),
+  );
+  const visibleReports = activeTab === 'All'
+    ? allReports
+    : allReports.filter((report) => report.status === activeTab);
 
-  const totalPages = Math.max(1, Math.ceil(myReports.length / PAGE_SIZE));
-  const pageItems = myReports.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(visibleReports.length / PAGE_SIZE));
+  const pageItems = visibleReports.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const currentViewReport = viewReport
+    ? allReports.find((report) => report.id === viewReport.id) ?? viewReport
+    : null;
 
   const tabCount = (tab: 'All' | Status) => {
-    const all = reports.filter((r) => r.reportedBy === user?.name);
-    if (tab === 'All') return all.length;
-    return all.filter((r) => r.status === tab).length;
+    if (tab === 'All') return allReports.length;
+    return allReports.filter((report) => report.status === tab).length;
   };
 
   return (
     <AppShell>
       <PageHeader title="My Reports" breadcrumb="My Reports" />
       {reportsError && <p role="alert" className="mb-4 text-sm text-danger-text">{reportsError}</p>}
+      {locationCasesError && <p role="alert" className="mb-4 text-sm text-danger-text">{locationCasesError}</p>}
+      <p className="mb-4 text-sm text-ink-muted">Reports submitted in your location, including your reports and their latest status.</p>
 
       <div className="flex gap-2 mb-5 border-b border-border overflow-x-auto">
         {tabs.map((tab) => (
@@ -107,7 +139,7 @@ export function MyReports() {
         </div>
       )}
 
-      {viewReport && <ReportModal report={viewReport} onClose={() => setViewReport(null)} />}
+      {currentViewReport && <ReportModal report={currentViewReport} onClose={() => setViewReport(null)} />}
     </AppShell>
   );
 }

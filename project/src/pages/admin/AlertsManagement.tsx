@@ -10,16 +10,39 @@ import { useToast } from '@/components/Toast';
 import { DISEASES, LOCATIONS, type RiskLevel } from '@/data/mockData';
 
 export function AlertsManagement() {
-  const { alerts, addAlert, updateAlert, deleteAlert } = useData();
+  const { alerts, reports, cases, addAlert, updateAlert, deleteAlert } = useData();
   const { show } = useToast();
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const visibleAlerts = user?.accountRole === 'HEALTH_OFFICIAL'
-    ? alerts.filter((alert) => alert.status === 'Active')
+  const isHealthcareOfficial = user?.accountRole === 'HEALTH_OFFICIAL'
+    || user?.accountRole === 'HEALTHCARE_WORKER';
+  const activeHighPriorityCaseAlerts = isHealthcareOfficial
+    ? cases.flatMap((caseRecord) => {
+        if (caseRecord.status !== 'ACTIVE') return [];
+        const report = reports.find((item) => item.id === caseRecord.reportId);
+        if (!report || report.severity !== 'High' || !['Verified', 'Active'].includes(report.status)) return [];
+        return [{
+          id: `CASE-${caseRecord.id}`,
+          disease: report.disease,
+          location: report.location,
+          riskLevel: 'High' as const,
+          cases: report.affectedPeople,
+          message: 'Verified high-priority case is active.',
+          date: report.dateObserved,
+          status: 'Active' as const,
+        }];
+      })
+    : [];
+  const visibleAlerts = isHealthcareOfficial
+    ? [
+        ...alerts.filter((alert) => alert.riskLevel === 'High' && alert.status === 'Active'),
+        ...activeHighPriorityCaseAlerts,
+      ]
     : alerts;
   const selectedAlertId = (location.state as { selectedAlertId?: string } | null)?.selectedAlertId;
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingAlertId, setEditingAlertId] = useState<string | null>(null);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [detailAlertId, setDetailAlertId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -42,15 +65,38 @@ export function AlertsManagement() {
     navigate(location.pathname, { replace: true, state: null });
   }, [selectedAlertId, location.pathname, navigate]);
 
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    addAlert({ ...form, cases: 0, status: 'Active' });
-    show('Alert created successfully!');
+  const closeForm = () => {
     setModalOpen(false);
+    setEditingAlertId(null);
     setForm({ disease: '', location: '', riskLevel: 'Low', message: '', date: new Date().toISOString().slice(0, 10) });
   };
 
-  const handleAction = (id: string, action: 'Acknowledge' | 'Resolve' | 'Delete') => {
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingAlertId) {
+      updateAlert(editingAlertId, form);
+      show('Alert updated successfully.');
+    } else {
+      addAlert({ ...form, cases: 0, status: 'Active' });
+      show('Alert created successfully!');
+    }
+    closeForm();
+  };
+
+  const handleAction = (id: string, action: 'Edit' | 'Acknowledge' | 'Resolve' | 'Delete') => {
+    if (action === 'Edit') {
+      const alert = alerts.find((item) => item.id === id);
+      if (!alert) return;
+      setEditingAlertId(id);
+      setForm({
+        disease: alert.disease,
+        location: alert.location,
+        riskLevel: alert.riskLevel,
+        message: alert.message,
+        date: alert.date,
+      });
+      setModalOpen(true);
+    }
     if (action === 'Acknowledge') { updateAlert(id, { status: 'Acknowledged' }); show('Alert acknowledged.'); }
     if (action === 'Resolve') { updateAlert(id, { status: 'Resolved' }); show('Alert resolved.'); }
     if (action === 'Delete') { deleteAlert(id); show('Alert deleted.'); }
@@ -68,7 +114,7 @@ export function AlertsManagement() {
             <span className="text-ink-muted">Alerts</span>
           </nav>
         </div>
-        <button onClick={() => setModalOpen(true)} className="btn-primary">
+        <button onClick={() => { closeForm(); setModalOpen(true); }} className="btn-primary">
           <Plus className="h-4 w-4" /> Create Alert
         </button>
       </div>
@@ -93,7 +139,7 @@ export function AlertsManagement() {
               {visibleAlerts.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-4 py-10 text-center text-sm text-ink-muted">
-                    {user?.accountRole === 'HEALTH_OFFICIAL' ? 'No active alerts.' : 'No alerts found.'}
+                    {isHealthcareOfficial ? 'No active high-priority cases or alerts.' : 'No alerts found.'}
                   </td>
                 </tr>
               ) : visibleAlerts.map((a, i) => (
@@ -107,19 +153,26 @@ export function AlertsManagement() {
                   <td className="px-4 py-3.5 text-sm text-ink-muted">{new Date(a.date).toLocaleDateString()}</td>
                   <td className="px-4 py-3.5"><Badge status={a.status} /></td>
                   <td className="px-4 py-3.5 text-right relative">
-                    <button onClick={() => setOpenMenu(openMenu === a.id ? null : a.id)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100 transition">
-                      <MoreVertical className="h-4 w-4 text-ink-muted" />
-                    </button>
-                    {openMenu === a.id && (
-                      <div ref={menuRef} className="animate-scale-in absolute right-4 top-12 z-10 w-40 rounded-lg border border-border bg-white shadow-lg overflow-hidden">
-                        {a.status === 'Active' && (
-                          <button onClick={() => handleAction(a.id, 'Acknowledge')} className="flex w-full items-center px-4 py-2.5 text-sm text-ink hover:bg-slate-50">Acknowledge</button>
+                    {a.id.startsWith('CASE-') ? (
+                      <span className="text-xs text-ink-muted">From active case</span>
+                    ) : (
+                      <>
+                        <button onClick={() => setOpenMenu(openMenu === a.id ? null : a.id)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg hover:bg-slate-100 transition">
+                          <MoreVertical className="h-4 w-4 text-ink-muted" />
+                        </button>
+                        {openMenu === a.id && (
+                          <div ref={menuRef} className="animate-scale-in absolute right-4 top-12 z-10 w-40 rounded-lg border border-border bg-white shadow-lg overflow-hidden">
+                            <button onClick={() => handleAction(a.id, 'Edit')} className="flex w-full items-center px-4 py-2.5 text-sm text-ink hover:bg-slate-50">Edit</button>
+                            {a.status === 'Active' && (
+                              <button onClick={() => handleAction(a.id, 'Acknowledge')} className="flex w-full items-center border-t border-border px-4 py-2.5 text-sm text-ink hover:bg-slate-50">Acknowledge</button>
+                            )}
+                            {a.status !== 'Resolved' && (
+                              <button onClick={() => handleAction(a.id, 'Resolve')} className="flex w-full items-center px-4 py-2.5 text-sm text-ink hover:bg-slate-50">Resolve</button>
+                            )}
+                            <button onClick={() => handleAction(a.id, 'Delete')} className="flex w-full items-center px-4 py-2.5 text-sm text-danger-text hover:bg-danger-bg border-t border-border">Delete</button>
+                          </div>
                         )}
-                        {a.status !== 'Resolved' && (
-                          <button onClick={() => handleAction(a.id, 'Resolve')} className="flex w-full items-center px-4 py-2.5 text-sm text-ink hover:bg-slate-50">Resolve</button>
-                        )}
-                        <button onClick={() => handleAction(a.id, 'Delete')} className="flex w-full items-center px-4 py-2.5 text-sm text-danger-text hover:bg-danger-bg border-t border-border">Delete</button>
-                      </div>
+                      </>
                     )}
                   </td>
                 </tr>
@@ -137,13 +190,13 @@ export function AlertsManagement() {
       )}
 
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setModalOpen(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={closeForm}>
           <div className="animate-scale-in w-full max-w-md card" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-border px-6 py-4">
-              <h3 className="text-lg font-semibold text-ink">Create Alert</h3>
-              <button onClick={() => setModalOpen(false)} className="text-ink-muted hover:text-ink"><X className="h-5 w-5" /></button>
+              <h3 className="text-lg font-semibold text-ink">{editingAlertId ? 'Edit Alert' : 'Create Alert'}</h3>
+              <button onClick={closeForm} className="text-ink-muted hover:text-ink"><X className="h-5 w-5" /></button>
             </div>
-            <form onSubmit={handleCreate} className="px-6 py-4 space-y-4">
+            <form onSubmit={handleSave} className="px-6 py-4 space-y-4">
               <div>
                 <label className="label">Disease</label>
                 <select value={form.disease} onChange={(e) => setForm((p) => ({ ...p, disease: e.target.value }))} className="input" required>
@@ -175,8 +228,8 @@ export function AlertsManagement() {
                 <input type="date" value={form.date} onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))} className="input" required />
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setModalOpen(false)} className="btn-secondary">Cancel</button>
-                <button type="submit" className="btn-primary">Create Alert</button>
+                <button type="button" onClick={closeForm} className="btn-secondary">Cancel</button>
+                <button type="submit" className="btn-primary">{editingAlertId ? 'Save Changes' : 'Create Alert'}</button>
               </div>
             </form>
           </div>

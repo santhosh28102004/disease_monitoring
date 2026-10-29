@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 import type { Role, User } from '@/data/mockData';
 
 interface AuthContextValue {
@@ -28,22 +28,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
-    } else {
-      localStorage.removeItem(USER_STORAGE_KEY);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (token) {
-      localStorage.setItem(TOKEN_STORAGE_KEY, token);
-    } else {
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
-    }
-  }, [token]);
-
   const login = (u: Partial<User> & { role: Role; token?: string }) => {
     const defaults =
       u.role === 'citizen'
@@ -52,23 +36,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { token: authToken, ...userData } = u;
     const nextUser = { ...defaults, ...userData } as User;
-    setUser(nextUser);
-    setToken(authToken ?? null);
     if (authToken) {
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(nextUser));
       localStorage.setItem(TOKEN_STORAGE_KEY, authToken);
     } else {
+      localStorage.removeItem(USER_STORAGE_KEY);
       localStorage.removeItem(TOKEN_STORAGE_KEY);
     }
+    setUser(nextUser);
+    setToken(authToken ?? null);
   };
 
   const updateUser = (updates: Partial<Pick<User, 'name' | 'email' | 'phone' | 'location'>>) => {
-    setUser((current) => current ? { ...current, ...updates } : current);
+    if (!user) return;
+    const updatedUser = { ...user, ...updates };
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser));
+    setUser(updatedUser);
   };
 
   const logout = () => {
+    localStorage.removeItem(USER_STORAGE_KEY);
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
     setUser(null);
     setToken(null);
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
   };
 
   return (

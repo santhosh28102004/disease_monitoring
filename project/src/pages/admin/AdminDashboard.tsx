@@ -4,17 +4,14 @@ import { AppShell } from '@/components/AppShell';
 import { StatCard } from '@/components/StatCard';
 import { Badge } from '@/components/Badge';
 import { useAuth } from '@/context/AuthContext';
-import { mockLocations, analyticsStats, healthOfficialStats } from '@/data/mockData';
+import { useData } from '@/context/DataContext';
+import { getHealthMetrics } from '@/lib/healthMetrics';
 
 export function AdminDashboard() {
   const { user } = useAuth();
-  const dashboardStats = user?.accountRole === 'HEALTH_OFFICIAL'
-    ? healthOfficialStats
-    : analyticsStats;
-  const sorted = [...mockLocations].sort((a, b) => {
-    const order = { High: 0, Medium: 1, Low: 2 };
-    return order[a.riskLevel] - order[b.riskLevel];
-  });
+  const { reports, reportsError, cases, casesError } = useData();
+  const { stats, locations } = getHealthMetrics(reports, cases);
+  const errors = [reportsError, casesError].filter(Boolean).join(' ');
 
   return (
     <AppShell>
@@ -25,11 +22,12 @@ export function AdminDashboard() {
         </div>
       </div>
 
+      {errors && <p role="alert" className="mb-4 text-sm text-danger-text">{errors}</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard icon={FileText} label="Total Reports" value={dashboardStats.totalReports.toLocaleString()} iconBg="bg-primary-light" iconColor="text-primary" />
-        <StatCard icon={ShieldCheck} label="Verified Cases" value={dashboardStats.verifiedCases.toLocaleString()} iconBg="bg-success-bg" iconColor="text-success-icon" />
-        <StatCard icon={Activity} label="Active Cases" value={dashboardStats.activeCases.toLocaleString()} iconBg="bg-warning-bg" iconColor="text-warning-icon" />
-        <StatCard icon={CheckCircle2} label="Resolved Cases" value={dashboardStats.resolvedCases.toLocaleString()} iconBg="bg-success-bg" iconColor="text-success-icon" />
+        <StatCard icon={FileText} label="Total Reports" value={stats.totalReports.toLocaleString()} iconBg="bg-primary-light" iconColor="text-primary" />
+        <StatCard icon={ShieldCheck} label="Verified Cases" value={stats.verifiedCases.toLocaleString()} iconBg="bg-success-bg" iconColor="text-success-icon" />
+        <StatCard icon={Activity} label="Active Cases" value={stats.activeCases.toLocaleString()} iconBg="bg-warning-bg" iconColor="text-warning-icon" />
+        <StatCard icon={CheckCircle2} label="Resolved Cases" value={stats.resolvedCases.toLocaleString()} iconBg="bg-success-bg" iconColor="text-success-icon" />
       </div>
 
       <div className="card p-6">
@@ -47,16 +45,20 @@ export function AdminDashboard() {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Total Reports</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Verified Cases</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Active Cases</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Resolved Cases</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Risk Level</th>
               </tr>
             </thead>
             <tbody>
-              {sorted.map((l) => (
+              {locations.length === 0 ? (
+                <tr><td colSpan={6} className="px-4 py-10 text-center text-sm text-ink-muted">{errors ? 'Unable to load location statistics.' : 'No reports have been submitted yet.'}</td></tr>
+              ) : locations.map((l) => (
                 <tr key={l.name} className="border-b border-border last:border-0 hover:bg-slate-50 transition">
                   <td className="px-4 py-3.5 text-sm font-medium text-ink">{l.name}</td>
                   <td className="px-4 py-3.5 text-sm text-ink-muted">{l.totalReports}</td>
                   <td className="px-4 py-3.5 text-sm text-ink-muted">{l.verifiedCases}</td>
                   <td className="px-4 py-3.5 text-sm text-ink-muted">{l.activeCases}</td>
+                  <td className="px-4 py-3.5 text-sm text-ink-muted">{l.resolvedCases}</td>
                   <td className="px-4 py-3.5"><Badge status={l.riskLevel} /></td>
                 </tr>
               ))}

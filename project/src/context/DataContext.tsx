@@ -13,6 +13,8 @@ const normalizeSeverity = (value?: string): Severity => {
 
 const normalizeStatus = (value?: string): Status => {
   const normalized = (value ?? 'Pending').toString().toUpperCase();
+  if (normalized === 'SUBMITTED') return 'Submitted';
+  if (normalized === 'PENDING') return 'Pending';
   if (normalized === 'VERIFIED') return 'Verified';
   if (normalized === 'REJECTED') return 'Rejected';
   if (normalized === 'UNDER_REVIEW') return 'Under Review';
@@ -28,11 +30,21 @@ export interface CaseRecord {
   status: 'ACTIVE' | 'MONITORING' | 'RESOLVED';
 }
 
+export interface LocationCase {
+  id: string;
+  disease: string;
+  symptoms: string[];
+  affectedPeople: number;
+  severity: string;
+  status: Status;
+  dateObserved: string;
+}
+
 interface BackendReport {
   _id: string;
   disease?: { diseaseName?: string; name?: string } | string;
   location?: { area?: string; name?: string } | string;
-  reporter?: { fullName?: string; name?: string } | string;
+  reporter?: { _id?: string; fullName?: string; name?: string } | string;
   symptoms?: string[] | string;
   affectedPeople?: number;
   dateObserved?: string;
@@ -60,6 +72,7 @@ const normalizeReport = (payload: BackendReport): Report => {
 
   return {
     id: payload._id,
+    reportedById: typeof payload.reporter === 'object' ? payload.reporter?._id : payload.reporter,
     reportedBy: typeof reporter === 'string' ? reporter : 'Unknown',
     disease: typeof disease === 'string' ? disease : 'Unknown',
     symptoms: Array.isArray(payload.symptoms) ? payload.symptoms.join(', ') : payload.symptoms ?? '',
@@ -92,6 +105,9 @@ interface DataContextValue {
   reportsError: string | null;
   cases: CaseRecord[];
   casesError: string | null;
+  locationCases: LocationCase[];
+  locationCasesError: string | null;
+  locationCasesLoading: boolean;
   alerts: Alert[];
   addReport: (r: Omit<Report, 'id' | 'createdAt' | 'status'>) => Promise<Report>;
   updateReport: (id: string, updates: Partial<Report>) => Promise<Report>;
@@ -112,6 +128,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [cases, setCases] = useState<CaseRecord[]>([]);
   const [casesError, setCasesError] = useState<string | null>(null);
+  const [locationCases, setLocationCases] = useState<LocationCase[]>([]);
+  const [locationCasesError, setLocationCasesError] = useState<string | null>(null);
+  const [locationCasesLoading, setLocationCasesLoading] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>(mockAlerts);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -119,13 +138,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const refreshWhenVisible = () => {
       if (document.visibilityState === 'visible') setRefreshKey((current) => current + 1);
     };
+    if (!token) return;
+
     window.addEventListener('focus', refreshWhenVisible);
     document.addEventListener('visibilitychange', refreshWhenVisible);
+    const refreshInterval = window.setInterval(refreshWhenVisible, 15000);
     return () => {
       window.removeEventListener('focus', refreshWhenVisible);
       document.removeEventListener('visibilitychange', refreshWhenVisible);
+      window.clearInterval(refreshInterval);
     };
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -181,6 +204,39 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return () => controller.abort();
   }, [token, user?.role, refreshKey]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    const location = user?.role === 'citizen' ? user.location?.trim() : '';
+    if (!token || !location) {
+      setLocationCases([]);
+      setLocationCasesError(null);
+      setLocationCasesLoading(false);
+      return () => controller.abort();
+    }
+
+    setLocationCasesLoading(true);
+    apiRequest<Array<Omit<LocationCase, 'status'> & { status: string }>>(
+      `/reports/location-cases?location=${encodeURIComponent(location)}`,
+      { signal: controller.signal },
+    )
+      .then((records) => {
+        setLocationCases(records.map((record) => ({
+          ...record,
+          status: normalizeStatus(record.status),
+        })));
+        setLocationCasesError(null);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setLocationCasesError(error instanceof Error ? error.message : 'Unable to load cases for your location.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLocationCasesLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [token, user?.role, user?.location, refreshKey]);
+
   const addReport = async (r: Omit<Report, 'id' | 'createdAt' | 'status'>): Promise<Report> => {
     if (!token) throw new Error('Please log in again before submitting a report.');
 
@@ -204,6 +260,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const saved = normalizeReport(payload.report);
     setReports((prev) => [saved, ...prev.filter((item) => item.id !== saved.id)]);
     setReportsError(null);
+    if (
+      user?.role === 'citizen'
+      && user.location?.trim().toLocaleLowerCase() === saved.location.trim().toLocaleLowerCase()
+    ) {
+      setLocationCases((previous) => [
+        {
+          id: saved.id,
+          disease: saved.disease,
+          symptoms: saved.symptoms.split(',').map((item) => item.trim()).filter(Boolean),
+          affectedPeople: saved.affectedPeople,
+          severity: saved.severity,
+          status: 'Pending',
+          dateObserved: saved.dateObserved,
+        },
+        ...previous.filter((item) => item.id !== saved.id),
+      ]);
+    }
+    setRefreshKey((current) => current + 1);
     return saved;
   };
 
@@ -306,7 +380,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <DataContext.Provider value={{ reports, reportsError, cases, casesError, alerts, addReport, updateReport, editReport, deleteReport, updateCaseStatus, deleteCase, addAlert, updateAlert, deleteAlert }}>
+    <DataContext.Provider value={{ reports, reportsError, cases, casesError, locationCases, locationCasesError, locationCasesLoading, alerts, addReport, updateReport, editReport, deleteReport, updateCaseStatus, deleteCase, addAlert, updateAlert, deleteAlert }}>
       {children}
     </DataContext.Provider>
   );

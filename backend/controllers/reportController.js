@@ -115,6 +115,70 @@ exports.getUserReports = async (req, res, next) => {
   }
 };
 
+exports.getLocationCases = async (req, res, next) => {
+  try {
+    const area = typeof req.query.location === 'string' ? req.query.location.trim() : '';
+    if (!area) return res.status(400).json({ message: 'Location is required.' });
+
+    const location = await Location.findOne({
+      area: new RegExp(`^${escapeRegExp(area)}$`, 'i'),
+    }).select('_id');
+    if (!location) return res.json([]);
+
+    const [reports, cases] = await Promise.all([
+      Report.find({ location: location._id })
+        .select('disease symptoms affectedPeople severity status dateObserved createdAt')
+        .populate({ path: 'disease', select: 'diseaseName' })
+        .sort({ createdAt: -1 })
+        .lean(),
+      Case.find({ location: location._id })
+        .select('report status')
+        .populate({
+          path: 'report',
+          select: 'disease symptoms affectedPeople severity status dateObserved createdAt',
+          populate: { path: 'disease', select: 'diseaseName' },
+        })
+        .lean(),
+    ]);
+    const casesByReport = new Map(
+      cases
+        .filter((caseData) => caseData.report)
+        .map((caseData) => [String(caseData.report._id), caseData])
+    );
+    const reportsById = new Map(reports.map((report) => [String(report._id), report]));
+    cases.forEach((caseData) => {
+      if (caseData.report) reportsById.set(String(caseData.report._id), caseData.report);
+    });
+
+    const locationCases = Array.from(reportsById, ([reportId, report]) => {
+      const caseStatus = casesByReport.get(reportId)?.status;
+      const status = report.status === 'REJECTED'
+        ? 'REJECTED'
+        : caseStatus === 'MONITORING'
+          ? 'ACKNOWLEDGED'
+          : caseStatus === 'RESOLVED'
+            ? 'RESOLVED'
+            : caseStatus === 'ACTIVE'
+              ? report.status === 'VERIFIED' ? 'VERIFIED' : 'ACTIVE'
+              : report.status;
+
+      return {
+        id: String(report._id),
+        disease: report.disease?.diseaseName || 'Unknown',
+        symptoms: report.symptoms,
+        affectedPeople: report.affectedPeople,
+        severity: report.severity,
+        status,
+        dateObserved: report.dateObserved,
+      };
+    }).sort((first, second) => new Date(second.dateObserved).getTime() - new Date(first.dateObserved).getTime());
+
+    res.json(locationCases);
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.updateReport = async (req, res, next) => {
   try {
     const { disease, location, symptoms } = req.body;
